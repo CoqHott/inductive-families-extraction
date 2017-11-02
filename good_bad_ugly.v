@@ -43,6 +43,10 @@ Inductive vec: nat -> Type :=
 (* XXX: this follows from hprop-ness: *)
 Axiom val_vec: forall {n}, vec n -> list.
 Axiom vec_inj: forall {n} (xs ys: vec n), val_vec xs = val_vec ys -> xs = ys. 
+Axiom vec_JMEq: forall {m} (xs : vec m) (P : forall {k}, vec k -> Type), P xs -> forall {n} (ys : vec n), m = n -> val_vec xs = val_vec ys -> P ys. 
+
+Axiom val_vec_vnil: val_vec vnil = nil.
+Axiom val_vec_vcons: forall n (a : A) (xs: vec n), val_vec (vcons a xs) = cons a (val_vec xs).
 
 (* *** Definitions & Specifications *)
 
@@ -76,6 +80,16 @@ Fixpoint cat {n m} (t: vec n): vec m -> vec (n+m) :=
   | vcons x t => fun u => vcons x (cat t u)
   end.
 
+Definition val_cat {n m} (t: vec n)(u: vec m): list := val_vec (cat t u).
+Arguments val_cat /.
+
+Lemma val_cat_vnil: forall n (xs: vec n), val_cat vnil xs = val_vec xs.
+Proof. reflexivity. Qed.
+
+Lemma val_cat_vcons: forall m n x (t: vec n)(u : vec m), val_cat (vcons x t) u = cons x (val_cat t u).
+Proof. intros; unfold val_cat; simpl. rewrite val_vec_vcons. reflexivity. Qed.
+
+
 Lemma cat0s n (s: vec n) : cat vnil s = s.
 Proof. reflexivity. Qed.
 Lemma cat1s n x (s: vec n) : cat (vcons x vnil) s = vcons x s.
@@ -86,12 +100,25 @@ Proof. reflexivity. Qed.
 Lemma cat_nseq m n x (s: vec m) : cat (nseq n x) s = ncons n x s.
 Proof. induction n; auto; simpl. rewrite IHn; auto. Qed.
 
-(* FAILED(statement): [m + 0 != m] *)
+(* FAILED(heterogeneity): [m + 0 != m] *)
 Fail Lemma cats0 n (s: vec n) : cat s vnil = s.
 
-(* FAILED(statement): [(m + n) + o != m + (n + o)] *)
+Lemma val_cats0 n (s: vec n) : val_cat s vnil = val_vec s.
+Proof.
+induction s; auto. 
+simpl in *; rewrite !val_vec_vcons; congruence.
+Qed.
+
+(* FAILED(heterogeneity): [(m + n) + o != m + (n + o)] *)
 Fail Lemma catA m n o (s1: vec m)(s2: vec n)(s3: vec o) :
   cat s1 (cat s2 s3) = cat (cat s1 s2) s3.
+
+Lemma val_catA m n o (s1: vec m)(s2: vec n)(s3: vec o) :
+  val_cat s1 (cat s2 s3) = val_cat (cat s1 s2) s3.
+Proof.
+induction s1; auto.
+simpl in *. rewrite !val_vec_vcons. congruence. 
+Qed.
 
 (* last, belast, rcons, and last induction. *)
 
@@ -101,11 +128,30 @@ Fixpoint rcons {n} (s: vec n)(z: A): vec (S n) :=
   | vnil => vcons z vnil
   end.
 
+Definition val_rcons  {n} (s: vec n)(z: A): list := val_vec (rcons s z).
+Arguments val_rcons /.
+
+Lemma val_rcons_vcons : forall n (s: vec n) x z, 
+    val_rcons (vcons x s) z = cons x (val_rcons s z).
+Proof. intros; simpl; rewrite !val_vec_vcons; reflexivity. Qed.
+
+Lemma val_rcons_vnil : forall n (s: vec n) z, 
+    val_rcons vnil z = cons z nil.
+Proof. intros; simpl; rewrite !val_vec_vcons, !val_vec_vnil; reflexivity. Qed.
+
 Lemma rcons_cons n x (s: vec n) z : rcons (vcons x s) z = vcons x (rcons s z).
 Proof. reflexivity. Qed.
 
-(* FAILED(statement): [S n != n + 1] *)
+(* FAILED(heterogeneity): [S n != n + 1] *)
 Fail Lemma cats1 n (s: vec n) z : cat s (vcons z vnil) = rcons s z.
+
+Lemma val_cats1 n (s: vec n) z : val_cat s (vcons z vnil) = val_rcons s z.
+Proof.
+induction s.
+- auto.
+- rewrite val_cat_vcons, val_rcons_vcons; congruence.
+Qed.
+
 
 Fixpoint last' {n} (a: A)(t: vec n) : A :=
   match t with
@@ -154,10 +200,18 @@ Proof.
   generalize x. induction s; auto. intro. rewrite rcons_cons. simpl; rewrite IHs. auto.
 Qed.
 
-(* FAILED(statement): [m + S n != S m + n] *)
+(* FAILED(heterogeneity): [m + S n != S m + n] *)
 Fail Lemma cat_rcons m n x (s1: vec m)(s2: vec n) : cat (rcons s1 x) s2 = cat s1 (vcons x s2).
 
-(* FAILED(statement): [m + S n != S (m + n)] *)
+Lemma val_cat_rcons m n x (s1: vec m)(s2: vec n) : val_cat (rcons s1 x) s2 = val_cat s1 (vcons x s2).
+Proof.
+(* XXX: How could I exploit the following lemmas: *)
+Check val_cats1.
+Check val_catA.
+(* rewrite -cats1 -catA.  *)
+Abort.
+
+(* FAILED(heterogeneity): [m + S n != S (m + n)] *)
 Fail Lemma rcons_cat m n x (s1: vec m)(s2: vec n) : rcons (cat s1 s2) x = cat s1 (rcons s2 x).
 
 CoInductive last_spec : forall n, vec n -> Type :=
@@ -219,7 +273,7 @@ Fixpoint rev {n} (t: vec n): vec n :=
 Lemma rev_cons n x (s: vec n) : rev (vcons x s) = rcons (rev s) x.
 Proof. reflexivity. (* works because of inefficient implem *) Qed.
 
-(* FAILED(statement): [m + n != n + m] *)
+(* FAILED(heterogeneity): [m + n != n + m] *)
 Fail Lemma rev_cat m n (s: vec m)(t: vec n) : rev (cat s t) = cat (rev t) (rev s).
 
 Lemma rev_rcons n (s: vec n) x : rev (rcons s x) = vcons x (rev s).
@@ -316,7 +370,7 @@ Fixpoint zip' {n} (t1: vec A n) {struct t1}: vec B n -> vec (A * B) n :=
 Definition unzip1 n := @map _ _ n (@fst A B).
 Definition unzip2 n := @map _ _ n (@snd A B).
 
-(* FAILED(statement): [Nat.min n n != n] *)
+(* FAILED(heterogeneity): [Nat.min n n != n] *)
 Fail Lemma zip_unzip s : zip (unzip1 s) (unzip2 s) = s.
 
 Lemma zip_unzip n (s: vec (A * B) n) : zip' (unzip1 s) (unzip2 s) = s.
@@ -325,13 +379,13 @@ Proof.
   rewrite IHs. rewrite <- surjective_pairing. auto.
 Qed.
 
-(* FAILED(statement): [Nat.min m n !== m] under [m <= n] *)
+(* FAILED(heterogeneity): [Nat.min m n !== m] under [m <= n] *)
 Fail Lemma unzip1_zip m n (s: vec A m)(t: vec B n) : m <= n -> unzip1 (zip s t) = s.
 
-(* FAILED(statement): [Nat.min m n !== n] under [n <= m] *)
+(* FAILED(heterogeneity): [Nat.min m n !== n] under [n <= m] *)
 Fail Lemma unzip2_zip m n (s: vec A m)(t: vec B n) : m <= n -> unzip2 (zip s t) = t.
 
-(* FAILED(statement): [Nat.min m m + Nat.min k l != Nat.min (m + k) (m + l)] *)
+(* FAILED(heterogeneity): [Nat.min m m + Nat.min k l != Nat.min (m + k) (m + l)] *)
 Fail Lemma zip_cat m k l (s1: vec A m)(s2: vec A k)(t1: vec B m)(t2: vec B l) :
   zip (cat s1 s2) (cat t1 t2) = cat (zip s1 t1) (zip s2 t2).
 
@@ -380,7 +434,7 @@ Fixpoint allpairs {m n} (f: A -> B -> C)(s: vec A n)(t: vec B m): vec C (n * m) 
   | vcons a s => cat (map (uncurry f) (zip' (nseq m a) t)) (allpairs f s t)
   end.
 
-(* FAILED(statement): [m * k + n * k != (m + n) * k] *)
+(* FAILED(heterogeneity): [m * k + n * k != (m + n) * k] *)
 Fail Lemma allpairs_cat m n (f: A -> B -> C) (s1: vec A m)(s2: vec A n) t :
   allpairs f (cat s1 s2) t = cat (allpairs f s1 t) (allpairs f s2 t).
 
