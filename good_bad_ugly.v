@@ -398,9 +398,14 @@ Inductive vec: nat -> Type :=
 | vcons: forall {n}, A -> vec n -> vec (S n).
 
 (* XXX: this follows from hprop-ness: *)
+
+(* XXX: [vec_inj] is not useful because we are bound to use it with
+[xs, ys] having the same index. [vec_JMEq] is morally equivalent but
+more useful. *)
+
 Axiom val_vec: forall {n}, vec n -> list.
 Axiom vec_inj: forall {n} (xs ys: vec n), val_vec xs = val_vec ys -> xs = ys. 
-Axiom vec_JMEq: forall {m} (xs : vec m) (P : forall {k}, vec k -> Type), P xs -> forall {n} (ys : vec n), m = n -> val_vec xs = val_vec ys -> P ys. 
+Axiom vec_JMEq: forall {m} (xs : vec m) (P : forall {k}, vec k -> Type), P xs -> forall {n} (ys : vec n), val_vec xs = val_vec ys -> P ys.
 
 Axiom val_vec_vnil: val_vec vnil = nil.
 Axiom val_vec_vcons: forall n (a : A) (xs: vec n), val_vec (vcons a xs) = cons a (val_vec xs).
@@ -462,7 +467,7 @@ Fail Lemma cats0 n (s: vec n) : cat s vnil = s.
 
 Lemma val_cats0 n (s: vec n) : val_cat s vnil = val_vec s.
 Proof.
-induction s; auto. 
+induction s; auto.
 simpl in *; rewrite !val_vec_vcons; congruence.
 Qed.
 
@@ -474,7 +479,7 @@ Lemma val_catA m n o (s1: vec m)(s2: vec n)(s3: vec o) :
   val_cat s1 (cat s2 s3) = val_cat (cat s1 s2) s3.
 Proof.
 induction s1; auto.
-simpl in *. rewrite !val_vec_vcons. congruence. 
+simpl in *. rewrite !val_vec_vcons. congruence.
 Qed.
 
 (* last, belast, rcons, and last induction. *)
@@ -488,11 +493,11 @@ Fixpoint rcons {n} (s: vec n)(z: A): vec (S n) :=
 Definition val_rcons  {n} (s: vec n)(z: A): list := val_vec (rcons s z).
 Arguments val_rcons /.
 
-Lemma val_rcons_vcons : forall n (s: vec n) x z, 
+Lemma val_rcons_vcons : forall n (s: vec n) x z,
     val_rcons (vcons x s) z = cons x (val_rcons s z).
 Proof. intros; simpl; rewrite !val_vec_vcons; reflexivity. Qed.
 
-Lemma val_rcons_vnil : forall n (s: vec n) z, 
+Lemma val_rcons_vnil : forall n (s: vec n) z,
     val_rcons vnil z = cons z nil.
 Proof. intros; simpl; rewrite !val_vec_vcons, !val_vec_vnil; reflexivity. Qed.
 
@@ -613,7 +618,7 @@ Fail Fixpoint take {n} (m: nat)(t: vec n) {struct t}: vec (Nat.min m n) :=
 (* reversal *)
 
 (* FAILED(typing): [n + 0 != n] *)
-Fail Fixpoint catrev {m}{n} (s1: vec m)(s2: vec n): vec (n + m)  :=
+Fail Fixpoint catrev {m}{n} (s1: vec m)(s2: vec n): vec (n + m) :=
   match s1 with
   | vcons x s1' => catrev s1' (vcons x s2)
   | vnil => s2
