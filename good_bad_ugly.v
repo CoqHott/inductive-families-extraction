@@ -24,6 +24,298 @@ Inductive BushV' (A: Type): nat -> Type :=
 | leafV': forall n, Vector.t A n -> BushV' A n
 | nodeV': forall n, BushV A (N.to_nat (N.shiftl n 1)) -> BushV' A (N.to_nat n).
 
+(* From 'Equations, reloaded", Sozeau & Mangin *)
+
+Definition IsNZ (z: Z): Prop := (z <> 0)%Z.
+
+Inductive poly : bool -> nat -> Type :=
+| poly_z : poly true O
+| poly_c z : IsNZ z -> poly false O
+| poly_l {n b}(Q : poly b n) : poly b (S n)
+| poly_s {n b}(P : poly b n)(Q : poly false (S n)) : poly false (S n).
+
+Inductive mono : nat -> Type :=
+| mono_z : mono O
+| mono_l {n} : mono n -> mono (S n)
+| mono_s {n} : mono (S n) -> mono (S n).
+
+Fixpoint get_coef {n}(m: mono n): forall {b}, poly b n -> Z :=
+  match m with
+  | mono_z =>
+    fun b (p: poly b 0) =>
+      match p in poly _ n return match n with O => Z | S _ => unit end with
+      | poly_z => 0%Z
+      | @poly_c z nz => z
+      | poly_l Q => tt
+      | poly_s P Q => tt
+      end
+  | mono_l m =>
+    fun b p =>
+      match p in poly _ n
+            return match n with
+                   | 0 => unit
+                   | S n => (forall b, poly b n -> Z) -> Z
+                   end
+      with
+      | poly_z => tt
+      | poly_c nz => tt
+      | poly_l Q => fun k => k _ Q
+      | poly_s P Q => fun k => k _ P
+      end (@get_coef _ m)
+  | mono_s m =>
+    fun b p =>
+      match p in poly _ n
+            return match n with
+                   | 0 => unit
+                   | S n => (forall b, poly b (S n) -> Z) -> Z
+                   end
+      with
+      | poly_z => tt
+      | poly_c nz => tt
+      | poly_l Q => fun k => 0%Z
+      | poly_s P Q => fun k => k _ Q
+      end (@get_coef _ m)
+  end.
+
+Record sig (A: Type)(B: A -> Type): Type :=
+  ex { proj1: A; proj2: B proj1 }.
+
+Notation "a ; b" := (@ex _ _ a b) (at level 50).
+
+Definition transport {A: Type} (P: A -> Type) {x y: A} 
+    (p: x = y) (u: P x): P y :=
+  match p with eq_refl => u end.
+Notation "p # x" := (transport p x)
+                      (right associativity, at level 65, only parsing).
+
+Definition ap {A B: Type} (f: A -> B) {x y: A} : x = y -> f x = f y.
+  exact (fun p => match p with eq_refl => eq_refl end).
+Defined.
+
+Lemma ap2 {A B C} : forall (f: A -> B -> C), forall a1 a2 b1 b2 (q : a1 = a2)(qb : b1 = b2), f a1 b1 = f a2 b2.
+Proof.
+  intros; induction q; induction qb; auto.
+Defined.
+
+
+Definition sig_path {A}{B : A -> Type} {u v : sig B}(q : v.(proj1) = u.(proj1))(p : u.(proj2) = transport (P := fun x => B (x)) q v.(proj2)): u = v.
+  destruct u, v. simpl in *. destruct q. simpl in *. destruct p. auto.
+Defined.
+
+Definition proj1_path {A} {B : A -> Type} {u v : sig B} (p : u = v): u.(proj1) = v.(proj1) :=
+  ap (fun x => x.(proj1)) p.
+
+Notation "p ..1" := (proj1_path p) (at level 3).
+
+Definition proj2_path {A} {B : A -> Type} {u v : sig B} (p : u = v): p..1 # u.(proj2) = v.(proj2) := match p with eq_refl => eq_refl end.
+
+
+Lemma uip_nat {n : nat}: forall (q: n = n), q = eq_refl.
+Admitted. (* from Hedberg *)
+
+Lemma uip_bool {b : bool}: forall (q: b = b), q = eq_refl.
+Admitted. (* from Hedberg *)
+
+Lemma uip_Z {b : Z}: forall (q: b = b), q = eq_refl.
+Admitted. (* from Hedberg *)
+
+Axiom HProp_Prop : forall {P : Prop} (p q: P), p = q.
+(* assuming proof irrelevance of Prop *)
+
+
+Lemma transp_refl {b n}: forall (q: n = n) (p: poly b n), transport q p = p.
+Proof.
+intros q p. rewrite (uip_nat q). auto.
+Qed.
+
+Definition S_inj {m n}: S m = S n -> m = n.
+Proof.
+intro q. inversion q. reflexivity.
+Defined.
+
+Lemma transp_S {b m n}: forall (q: S m = S n) (p: poly b m), transport q (poly_l p) = poly_l (transport (S_inj q) p).
+Proof.
+inversion q. subst. rewrite (uip_nat q). simpl. auto.
+Defined.
+
+Lemma transp_S_poly_s {b m n}: forall (Q: S m = S n) (p: poly b m)(q: poly false (S m)),
+    transport Q (poly_s p q) = poly_s (transport (S_inj Q) p) (transport Q q).
+Proof.
+inversion Q. subst. rewrite (uip_nat Q). simpl. auto.
+Defined.
+
+
+Fixpoint mL {n} (p : poly false n): mono n :=
+  match p in poly b n
+        return match b with
+               | false => mono n
+               | true => unit 
+               end
+  with
+  | poly_z => tt
+  | poly_c nz => mono_z
+  | @poly_l _ b q => 
+    match b return forall n, poly b n -> if b then unit else mono (S n) with true => fun _ _ => tt | false => fun n q => mono_l (mL q) end _ q
+  | poly_s p q => mono_s (mL q)
+  end.
+
+Lemma get_coef_mL {b n}: forall (p: poly b n)(q : b = false), IsNZ (get_coef (mL (transport (P := fun b => poly b n) q p)) p).
+Proof.
+intros p q.
+induction p; simpl; try solve [inversion q]; auto.
+- rewrite (uip_bool q); auto.
+- destruct b; try solve [inversion q]. 
+  rewrite (uip_bool q); auto. 
+  apply (IHp eq_refl).
+- rewrite (uip_bool q).
+  apply (IHp2 eq_refl).
+Qed.
+
+Lemma get_coef_eq_1 {n n'} b1 b2 (p1: poly b1 n)(p2: poly b2 n')(q: n' = n):
+  (forall (m: mono n), get_coef m p1 = get_coef m (transport q p2)) ->
+  (b1 ; p1) = (b2 ; transport (P := fun n => poly b2 n) q p2) :> @sig bool (fun b => poly b n).
+Proof.
+generalize dependent n'. generalize dependent b2.
+induction p1; intros b2 n' p2.
+- destruct p2; intros q H; try solve [inversion q].
+  + rewrite transp_refl.
+    reflexivity.
+  + rewrite transp_refl in H.
+    specialize (H mono_z).
+    simpl in H. subst.
+    contradiction.
+- destruct p2; intros q H; try solve [inversion q].
+  + rewrite transp_refl in H.
+    specialize (H mono_z).
+    contradiction.
+  + rewrite transp_refl in *.
+    specialize (H mono_z).
+    simpl in H. subst.
+    assert (i = i0) as <- by apply HProp_Prop.
+    reflexivity.
+- destruct p2; intros q H; try solve [inversion q].
+  + rewrite transp_S.
+    assert ((b ; p1) = (b0 ; transport (P := poly b0)(S_inj q) p2) :> @sig bool (fun b => poly b n)).
+    {
+      apply IHp1. intros.
+      specialize (H (mono_l m)).
+      simpl in H.
+      rewrite transp_S in H. assumption.
+    }
+    inversion H0. induction H2.
+    destruct H3.
+    reflexivity.
+  + exfalso.
+    rewrite transp_S_poly_s in H.
+    specialize (H (mono_s (mL (transport q p2_2)))).
+    replace (get_coef (mono_s (mL _)) (poly_l p1)) with 0%Z in H; [|compute; auto].
+    replace (get_coef (mono_s (mL _)) (poly_s (transport (S_inj q) p2_1) (transport q p2_2))) with (get_coef (mL (transport q p2_2)) (transport q p2_2)) in H; [|compute;auto].
+
+    pose proof (@get_coef_mL _ _ (transport (P := poly false) q p2_2)).
+    specialize (H0 eq_refl). simpl in *.
+    rewrite <- H in H0.
+    contradiction.
+- destruct p2; intros q H; try solve [inversion q].
+  + exfalso.
+    rewrite transp_S in H.
+    specialize (H (mono_s (mL p1_2))).
+    replace (get_coef (mono_s (mL _)) (poly_l _)) with 0%Z in H; [|compute; auto].
+    replace (get_coef (mono_s (mL _)) (poly_s p1_1 p1_2)) with (get_coef (mL p1_2) p1_2) in H; [|compute;auto].
+
+    pose proof (@get_coef_mL _ _ p1_2).
+    specialize (H0 eq_refl). simpl in *.
+    rewrite H in H0.
+    contradiction.
+  + rewrite transp_S_poly_s in * |- *.
+    assert ((b ; p1_1) = (b0 ; transport (P := poly b0) (S_inj q) p2_1) :> @sig bool (fun b => poly b n)).
+    {
+      apply IHp1_1.
+      intros.
+      apply (H (mono_l m)).
+    }
+    assert ((false; p1_2) = (false; transport (P := poly false) q p2_2) :> @sig bool (fun b => poly b (S n))).
+    {
+      apply IHp1_2.
+      intros.
+      apply (H (mono_s m)).
+    }
+    pose proof (@sig_path bool (fun b => poly b (S n)) (false; poly_s p1_1 p1_2) (false; poly_s (transport (S_inj q) p2_1) (transport q p2_2)) eq_refl).
+    apply H2.
+    simpl.
+    set (x1 := ((b ; p1_1 : @sig bool (fun b => poly b n)))).
+    set (y1 := ((b0 ; transport (P := poly b0) (S_inj q) p2_1 : @sig bool (fun b => poly b n)))).
+    set (x2 := p1_2).
+    set (y2 := transport (P := poly _) q p2_2).
+    pose proof (ap2 (fun u v => poly_s u.(proj2) v)
+                       (a1 := x1)(a2 := y1)
+                       (b1 := x2)(b2 := y2)).
+    apply H3. subst x1 y1; auto.
+    subst x2 y2.
+    pose proof (proj2_path H1).
+    simpl in *.
+    assert (H1 ..1 = eq_refl) by apply uip_bool.
+    rewrite H5 in H4. simpl in *. auto.
+Qed.
+
+Fixpoint eval {n b} (p: poly b n): Vector.t Z n -> Z :=
+  match p with
+  | poly_z =>
+    fun (v: Vector.t Z 0) =>
+      match v in Vector.t _ n
+            return match n with 0 => Z | S _ => unit end
+      with
+      | nil _ => 0%Z
+      | cons _ _ _ _ => tt
+      end
+  | @poly_c z nz =>
+    fun (v: Vector.t Z 0) =>
+      match v in Vector.t _ n
+            return match n with 0 => Z | S _ => unit end
+      with
+      | nil _ => z
+      | cons _ _ _ _ => tt
+            end
+  | poly_l Q =>
+    fun v =>
+      match v in Vector.t _ n
+            return match n with
+                   | 0 => unit
+                   | S n => (Vector.t Z n -> Z) -> Z
+                   end
+      with
+      | nil _ => tt
+      | cons _ _ _ xs => fun k => k xs
+      end (@eval _ _ Q)
+  | poly_s P Q =>
+    fun v =>
+      match v in Vector.t _ n
+            return match n with
+                   | 0 => unit
+                   | S n => (Vector.t Z n -> Z) -> (Vector.t Z (S n) -> Z) -> Z
+                         end
+      with
+      | nil _ => tt
+      | cons _ y _ ys => fun kP kQ => (kP ys + y * kQ (cons _ y _ ys))%Z
+      end (@eval _ _ P) (@eval _ _ Q)
+  end.
+
+Lemma polyz_eval {n} (p : poly true n) (v: Vector.t Z n) : eval p v = 0%Z.
+Proof.
+remember true as b eqn:Hb.
+induction p; try solve [inversion Hb].
+- case v using case0.
+  auto.
+- unshelve eapply (@caseS _ (fun n' v => forall p' (q: n = n') , transport q p = p' -> eval (poly_l p') v = 0%Z) _  n v p).
+  + simpl. intros. 
+    destruct q.
+    simpl in *.
+    destruct H.
+    apply IHp. auto. 
+  + auto.
+  + auto.
+Qed.  
+
+
 (* * The Good ? *)
 
 (* ** SSR's tuple *)
