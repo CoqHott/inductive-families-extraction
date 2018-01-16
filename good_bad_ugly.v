@@ -11,7 +11,72 @@ Inductive Bush (A : Type): Type :=
 | leaf : A -> Bush A
 | node : Bush (A * A) -> Bush A.
 
-(** TODO: Ralf Hinze PNS "Numerical Representations as Higher-Order Nested Datatypes" *)
+
+(** Ralf Hinze PNS "Numerical Representations as Higher-Order Nested Datatypes" *)
+
+Inductive Node23 (T A: Type): Type :=
+| Node2 : T -> A -> T -> Node23 T A
+| Node3 : T -> A -> T -> A -> T -> Node23 T A.
+
+Inductive Tree23 (T A: Type): Type := 
+| Zero : T -> Tree23 T A
+| Succ : Tree23 (Node23 T A) A -> Tree23 T A.
+
+Arguments Zero {_}{_} a.
+Arguments Succ {_}{_} t.
+
+Definition TREE23 := Tree23 unit.
+
+Example t : TREE23 nat :=
+  Succ
+    (Succ 
+       (Succ
+          (Zero
+             (Node2
+                (Node2
+                   (Node3 tt 1 tt 2 tt)
+                   3
+                   (Node3 tt 4 tt 5 tt))
+                6
+                (Node3 
+                   (Node2 tt 7 tt)
+                   8
+                   (Node2 tt 9 tt)
+                   10
+                   (Node3 tt 11 tt 12 tt)))))).
+
+
+Inductive Node23' (T : Type -> Type)(A : Type) :=
+| Node2' : T A -> A -> T A -> Node23' T A
+| Node3' : T A -> A -> T A -> A -> T A -> Node23' T A.
+
+Definition unit' (A : Type) := unit.
+
+Inductive Tree23' (T : Type -> Type)(A : Type) :=
+| Zero' : T A -> Tree23' T A
+| Succ' : Tree23' (Node23' T) A -> Tree23' T A.
+
+Definition TREE23' := Tree23' unit'.
+
+
+Example t' : TREE23' nat :=
+  Succ'
+    (Succ' 
+       (Succ'
+          (Zero'
+             (Node2'
+                (Node2'
+                   (Node3' tt 1 tt 2 tt)
+                   3
+                   (Node3' tt 4 tt 5 tt))
+                6
+                (Node3' 
+                   (Node2' tt 7 tt)
+                   8
+                   (Node2' tt 9 tt)
+                   10
+                   (Node3' tt 11 tt 12 tt)))))).
+
 
 (* * The Ugly *)
 
