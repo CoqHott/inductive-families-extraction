@@ -383,6 +383,44 @@ Qed.
 
 (* * The Good ? *)
 
+(* ** Views *)
+
+Inductive ty := Base : ty | Arr : ty -> ty -> ty.
+
+Inductive term : Type :=
+| lam : ty -> term -> term
+| app : term -> term -> term
+| var : nat -> term.
+
+Inductive In {X} (A : X) : list X -> Type :=
+| here {XS} : In A (A :: XS)
+| there {B XS} : In A XS -> In A (B :: XS).
+
+Inductive typing (Gamma: list ty): ty -> Type :=
+| Tlam {A B} : typing (A :: Gamma) B -> typing Gamma (Arr A B)
+| Tapp {A B} : typing Gamma (Arr A B) -> typing Gamma A -> typing Gamma B
+| Tvar {A} : In A Gamma -> typing Gamma A.
+
+Fixpoint val_In {X}{A : X}{Gamma: list X} (t: In A Gamma): nat :=
+  match t with
+  | here _ => 0
+  | there t => S (val_In t)
+  end.
+
+Fixpoint val_typing {Gamma}{T} (Delta: typing Gamma T): term :=
+  match Delta with
+  | @Tlam _ A _ Delta => lam A (val_typing Delta)
+  | Tapp Delta_f Delta_s => app (val_typing Delta_f) (val_typing Delta_s)
+  | Tvar x => var (val_In x)
+  end.
+
+Inductive TC_view (Gamma: list ty) : term -> Type := 
+| yes {T} : forall (Delta : typing Gamma T), TC_view Gamma (val_typing Delta)
+| no {t} : TC_view Gamma t.
+
+Fixpoint tc (Gamma: list ty)(t: term): TC_view Gamma t.
+Admitted. (* XXX: probably a hell to implement in Coq w/o Equation *)
+
 (* ** SSR's tuple *)
 
 Section Tuple.
